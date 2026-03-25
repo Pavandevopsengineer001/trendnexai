@@ -157,45 +157,93 @@ Return ONLY the summary, nothing else.
         seo_title: str
     ) -> str:
         """
-        Generate a complete 600-800 word article with:
-        - H1, H2 headings
+        Generate a complete 700-900 word authority-level article with:
+        - Strong introduction (hook)
+        - H1, H2, H3 headings with proper structure
+        - Expert insights and analysis
+        - Real-world impact and implications
         - Natural keyword integration
-        - Proper structure
-        - Conclusion with insights
-        - No plagiarism
+        - Future outlook conclusion
+        - 100% unique, human-like content
         """
         
         keywords_str = ", ".join(keywords)
-        target_words = self.config.get("target_words", 700)
+        target_words = self.config.get("target_words", 800)
         
         prompt = f"""
-Rewrite this news article into a professional, SEO-optimized article with these requirements:
+Rewrite this news article into a HIGH-AUTHORITY professional blog post that will rank highly on Google.
 
-STRUCTURE:
-1. Introduction (100-150 words) - Hook reader, introduce main topic
-2. H2 Heading: "Understanding [Topic]" (200-250 words)
-3. H2 Heading: "Key Implications" (150-200 words)
-4. H2 Heading: "What This Means for the Industry" (150-200 words)
-5. Conclusion (100-150 words) - Summary + future outlook
+CRITICAL REQUIREMENTS:
+- WORD COUNT: {target_words} words (±50 words acceptable) - This is CRUCIAL
+- Tone: {self.config.get("tone", "professional")} but engaging
+- Style: {self.config.get("style", "informative")} with expert insights
+- Plagiarism: ZERO - completely rewrite in your own words
+- Uniqueness: Make it significantly better than the original source
 
-REQUIREMENTS:
-- Target word count: {target_words} words (±50 words acceptable)
-- Naturally incorporate these keywords 2-3 times each: {keywords_str}
-- Write in {self.config.get("tone", "professional")} tone
-- Use {self.config.get("style", "informative")} writing style
-- Include facts and statistics where relevant
-- Avoid plagiarism - rewrite completely in your own words
-- Use short paragraphs (2-3 sentences max)
-- Add insights beyond original content
-- Format: Use [H1] for main heading and [H2] for subheadings
+ARTICLE STRUCTURE (follow exactly):
 
-ORIGINAL ARTICLE:
+[H1]{seo_title}[/H1]
+
+INTRODUCTION (100-150 words):
+- Start with a compelling hook that grabs attention
+- Clearly state the relevance to readers
+- Introduce the main topic and why it matters NOW
+- Include primary keyword naturally
+
+[H2]Understanding [Main Topic][/H2] (200-250 words)
+- Explain the topic in depth
+- Add context and background
+- Include statistics, data, or expert references
+- Answer "What is this?"
+
+[H2]Key Developments and Implications[/H2] (180-220 words)
+- Highlight specific impacts
+- Discuss both positive and negative implications
+- Add expert insights and analysis
+- Answer "Why should readers care?"
+
+[H2]Real-World Applications and Industry Impact[/H2] (150-200 words)
+- Provide concrete examples
+- Show practical applications
+- Discuss industry-wide implications
+- Include expert perspectives
+
+[H2]Future Outlook: What's Next?[/H2] (100-150 words)
+- Discuss upcoming trends
+- Predictions for the next 6-12 months
+- Advice for professionals
+- Call readers to action or next steps
+
+CONCLUSION (80-120 words):
+- Summarize key points
+- Reinforce why this matters
+- Include call-to-action
+- End with forward-looking statement
+
+KEYWORD REQUIREMENTS:
+- Primary keyword: "{keywords[0] if keywords else 'topic'}" - use 2-3 times naturally
+- Secondary keywords: {keywords_str[len(keywords[0]):] if len(keywords) > 1 else ''} - use 1-2 times each
+- LSI keywords: Include related terms and variations naturally
+
+WRITING STYLE:
+- Use short, punchy paragraphs (2-3 sentences max)
+- Use active voice whenever possible
+- Include specific numbers, statistics, and data points
+- Add subheadings to break up text
+- Use formatting: bold for key terms, lists for multiple items
+- Make it scannable and easy to read
+
+QUALITY CHECK:
+- Is it more authoritative than the original?
+- Does it provide unique value?
+- Would a professional recommend this article?
+- Is it completely original and not plagiarized?
+
+ORIGINAL NEWS:
 Title: {title}
 Content: {content}
 
-NEW SEO TITLE TO USE: {seo_title}
-
-Return ONLY the article content with proper heading tags, no preamble.
+START WRITING NOW - Return ONLY the article content with [H1], [H2] tags.
 """
         
         response = await client.chat.completions.create(
@@ -206,9 +254,10 @@ Return ONLY the article content with proper heading tags, no preamble.
         )
         
         article = response.choices[0].message.content.strip()
-        # Replace markdown-style headings with proper format
+        # Replace markdown-style headings with proper HTML format
         article = article.replace("[H1]", "<h1>").replace("[/H1]", "</h1>")
         article = article.replace("[H2]", "<h2>").replace("[/H2]", "</h2>")
+        article = article.replace("[H3]", "<h3>").replace("[/H3]", "</h3>")
         
         return article
     

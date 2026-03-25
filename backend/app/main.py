@@ -330,6 +330,88 @@ async def get_categories():
     
     return response
 
+@app.get("/api/articles/related")
+async def get_related_articles(tags: str = "", exclude_slug: str = None, limit: int = 3):
+    """
+    Get articles related by tags.
+    Filters by matching tags and excludes current article.
+    """
+    if not tags:
+        raise HTTPException(status_code=400, detail="tags parameter is required")
+    
+    tag_list = [t.strip() for t in tags.split(",") if t.strip()]
+    if not tag_list:
+        raise HTTPException(status_code=400, detail="At least one tag is required")
+    
+    # Build query: articles with matching tags, published, excluding current
+    query = {
+        "status": "published",
+        "tags": {"$in": tag_list}
+    }
+    
+    if exclude_slug:
+        query["slug"] = {"$ne": exclude_slug}
+    
+    # Fetch related articles
+    cursor = db.articles.find(query).sort("createdAt", -1).limit(limit)
+    items = []
+    async for doc in cursor:
+        doc["_id"] = str(doc["_id"])
+        items.append(doc)
+    
+    return {
+        "success": True,
+        "items": items,
+        "count": len(items)
+    }
+
+@app.post("/api/analytics/view")
+async def track_article_view(slug: str = None):
+    """
+    Track article view for analytics.
+    Increments view counter and logs engagement.
+    """
+    if not slug:
+        raise HTTPException(status_code=400, detail="slug parameter is required")
+    
+    try:
+        # Update article view count
+        result = await db.articles.update_one(
+            {"slug": slug, "status": "published"},
+            {
+                "$inc": {"views": 1, "engagement_score": 5},
+                "$set": {"lastViewedAt": datetime.utcnow()}
+            }
+        )
+        
+        if result.matched_count == 0:
+            raise HTTPException(status_code=404, detail="Article not found")
+        
+        # Also track in analytics collection
+        await db.analytics.insert_one({
+            "article_slug": slug,
+            "event": "view",
+            "timestamp": datetime.utcnow(),
+            "user_agent": "browser"
+        })
+        
+        logger.debug(f"View tracked for article: {slug}")
+        
+        return {
+            "success": True,
+            "message": "View tracked successfully"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to track view: {e}")
+        # Don't fail the request, just log the error
+        return {
+            "success": False,
+            "message": "Failed to track view",
+            "error": str(e)
+        }
+
 # ============== Admin Routes - Protected ==============
 @app.get("/api/admin/articles")
 async def admin_list_articles(
