@@ -1,104 +1,229 @@
 'use client';
 
 import Link from 'next/link';
-import { useState } from 'react';
+import Image from 'next/image';
+import { useState, useEffect } from 'react';
 import { usePathname } from 'next/navigation';
-import { Button } from '@/components/ui/button';
-import { Menu, X } from 'lucide-react';
+import { useTheme } from 'next-themes';
+import { Menu, X, Search, Bell, ChevronDown } from 'lucide-react';
 import { ThemeToggle } from './ThemeToggle';
-
-const languages = [
-  { code: 'en', name: 'English' },
-  { code: 'te', name: 'Telugu' },
-  { code: 'ta', name: 'Tamil' },
-  { code: 'kn', name: 'Kannada' },
-  { code: 'ml', name: 'Malayalam' },
-];
+import { CATEGORY_ARRAY, getCategoryById } from '@/lib/categories';
 
 export default function Header() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [mounted, setMounted] = useState(false);
   const pathname = usePathname();
+  const { theme } = useTheme();
 
-  const navItems = [
-    { label: 'Home', href: '/' },
-    { label: 'Technology', href: '/category/technology' },
-    { label: 'Business', href: '/category/business' },
-    { label: 'Sports', href: '/category/sports' },
-    { label: 'Health', href: '/category/health' },
-    { label: 'About', href: '/about' },
-  ];
+  // Prevent hydration mismatch
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const isActive = (href: string) => {
+    if (href === '/') return pathname === '/';
+    return pathname.startsWith(href);
+  };
 
   return (
-    <header className="sticky top-0 z-50 bg-white shadow-sm border-b border-slate-200 text-slate-800">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex justify-between items-center h-16 animate-fade-up">
-          <div className="flex items-center">
-            <Link href="/" className="text-2xl font-bold text-gray-900">
-              TrendNexAI
-            </Link>
-          </div>
+    <header className="sticky top-0 z-50 bg-background/95 backdrop-blur-md border-b border-border transition-all duration-300">
+      <div className="max-w-7xl mx-auto">
+        {/* Main Navigation Bar */}
+        <div className="flex justify-between items-center px-4 sm:px-6 lg:px-8 h-24">
+          {/* Logo */}
+          <Link
+            href="/"
+            className="flex items-center group focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-primary rounded-lg"
+          >
+            {mounted && (
+              <Image
+                src={theme === 'dark' ? '/trendnexai_dk.png' : '/trendnexai_wt.png'}
+                alt="TrendNexAI Logo"
+                width={400}
+                height={150}
+                className="h-24 w-auto object-contain transition-all duration-300"
+                priority
+              />
+            )}
+          </Link>
 
-          <nav className="hidden md:flex space-x-6">
-            {navItems.map((item) => {
-              const active = pathname === item.href || (item.href.startsWith('/category') && pathname?.startsWith(item.href));
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className={`font-medium transition-all duration-200 px-2 py-1 rounded-md ${active ? 'bg-white text-slate-900 shadow-md' : 'text-gray-700 dark:text-gray-200 hover:text-blue-600 dark:hover:text-sky-300 hover:bg-white/20 dark:hover:bg-slate-800/60'}`}
-                >
-                  {item.label}
-                </Link>
-              );
-            })}
+          {/* Center Navigation - Desktop */}
+          <nav className="hidden md:flex items-center gap-8">
+            <Link 
+              href="/" 
+              className={`text-sm font-medium transition-colors duration-200 ${
+                isActive('/') ? 'text-primary font-semibold' : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              Home
+            </Link>
+
+            {/* Category Dropdown */}
+            <div className="relative group">
+              <button className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors duration-200 flex items-center gap-1.5 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 rounded px-2 py-1">
+                Categories
+                <ChevronDown className="w-4 h-4 group-hover:rotate-180 transition-transform duration-200" />
+              </button>
+              
+              <div className="absolute left-0 mt-0 bg-card border border-border rounded-lg shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 pt-3 min-w-48">
+                <div className="grid grid-cols-1 gap-0">
+                  {CATEGORY_ARRAY.map((category) => (
+                    <Link
+                      key={category.id}
+                      href={category.href}
+                      className="px-4 py-2.5 text-sm hover:bg-muted transition-colors duration-200 flex items-center gap-2 border-b border-border last:border-b-0"
+                    >
+                      <span className="text-lg">{category.icon}</span>
+                      <span className="font-medium">{category.label}</span>
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <Link 
+              href="/about" 
+              className={`text-sm font-medium transition-colors duration-200 ${
+                isActive('/about') ? 'text-primary font-semibold' : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              About
+            </Link>
+
+            <Link 
+              href="/contact" 
+              className={`text-sm font-medium transition-colors duration-200 ${
+                isActive('/contact') ? 'text-primary font-semibold' : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              Contact
+            </Link>
           </nav>
 
-          <div className="flex items-center space-x-4">
-            {/* Language Selector */}
-            <select className="text-sm border rounded px-2 py-1 bg-white dark:bg-slate-700 text-gray-800 dark:text-gray-100">
-              {languages.map((lang) => (
-                <option key={lang.code} value={lang.code}>
-                  {lang.name}
-                </option>
-              ))}
-            </select>
+          {/* Right Actions */}
+          <div className="flex items-center gap-3">
+            {/* Search Button */}
+            <button 
+              onClick={() => setIsSearchOpen(!isSearchOpen)}
+              className="p-2 hover:bg-muted rounded-lg transition-colors duration-200 md:hidden focus:outline-none focus:ring-2 focus:ring-primary"
+              aria-label="Search"
+            >
+              <Search className="w-5 h-5 text-muted-foreground" />
+            </button>
 
-            {/* Theme toggler */}
+            {/* Desktop Search Bar */}
+            <div className="hidden md:flex items-center bg-muted rounded-lg px-3 py-2 gap-2 focus-within:ring-2 focus-within:ring-primary">
+              <Search className="w-4 h-4 text-muted-foreground" />
+              <input
+                type="text"
+                placeholder="Search articles..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="bg-transparent text-sm placeholder-muted-foreground focus:outline-none w-32"
+                aria-label="Search articles"
+              />
+            </div>
+
+            {/* Notifications */}
+            <button 
+              className="p-2 hover:bg-muted rounded-lg transition-colors duration-200 hidden sm:inline-flex focus:outline-none focus:ring-2 focus:ring-primary"
+              aria-label="Notifications"
+            >
+              <Bell className="w-5 h-5 text-muted-foreground" />
+            </button>
+
+            {/* Theme Toggle */}
             <ThemeToggle />
 
-            {/* Mobile menu button */}
-            <Button
-              variant="ghost"
-              size="sm"
-              className="md:hidden"
+            {/* Mobile Menu Button */}
+            <button 
               onClick={() => setIsMenuOpen(!isMenuOpen)}
+              className="p-2 hover:bg-muted rounded-lg transition-colors duration-200 md:hidden focus:outline-none focus:ring-2 focus:ring-primary"
+              aria-label="Toggle menu"
             >
-              {isMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
-            </Button>
+              {isMenuOpen ? (
+                <X className="w-5 h-5" />
+              ) : (
+                <Menu className="w-5 h-5" />
+              )}
+            </button>
           </div>
         </div>
 
-        {/* Mobile menu */}
-        {isMenuOpen && (
-          <div className="md:hidden pb-4">
-            <nav className="flex flex-col space-y-2">
-              {navItems.map((item) => (
-                <Link key={item.href} href={item.href} className="text-gray-700 hover:text-gray-900 py-2">
-                  {item.label}
-                </Link>
-              ))}
-            </nav>
+        {/* Mobile Search Bar */}
+        {isSearchOpen && (
+          <div className="border-t border-border bg-muted/50 px-4 py-3 md:hidden animate-fade-in">
+            <div className="flex items-center bg-background rounded-lg px-3 py-2 gap-2 border border-border focus-within:ring-2 focus-within:ring-primary">
+              <Search className="w-4 h-4 text-muted-foreground" />
+              <input
+                type="text"
+                placeholder="Search articles..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="bg-transparent text-sm placeholder-muted-foreground focus:outline-none w-full"
+                autoFocus
+                aria-label="Search articles"
+              />
+            </div>
           </div>
         )}
-      </div>
 
-      {/* Top Banner Ad Placeholder */}
-      <div className="bg-gray-100 border-t">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2">
-          <div className="bg-blue-200 h-16 flex items-center justify-center text-sm text-gray-600">
-            [Top Banner Ad - 728x90]
-          </div>
-        </div>
+        {/* Mobile Menu */}
+        {isMenuOpen && (
+          <nav className="border-t border-border bg-muted/50 animate-fade-in md:hidden">
+            <div className="px-4 py-3 space-y-2">
+              <Link
+                href="/"
+                className={`block px-3 py-2.5 rounded-lg transition-colors duration-200 ${
+                  isActive('/') 
+                    ? 'bg-primary text-primary-foreground font-semibold' 
+                    : 'text-foreground hover:bg-background'
+                }`}
+                onClick={() => setIsMenuOpen(false)}
+              >
+                Home
+              </Link>
+
+              {CATEGORY_ARRAY.map((category) => (
+                <Link
+                  key={category.id}
+                  href={category.href}
+                  className="block px-3 py-2.5 rounded-lg text-foreground hover:bg-background transition-colors duration-200"
+                  onClick={() => setIsMenuOpen(false)}
+                >
+                  <span className="text-lg mr-2">{category.icon}</span>
+                  {category.label}
+                </Link>
+              ))}
+
+              <Link
+                href="/about"
+                className={`block px-3 py-2.5 rounded-lg transition-colors duration-200 ${
+                  isActive('/about') 
+                    ? 'bg-primary text-primary-foreground font-semibold' 
+                    : 'text-foreground hover:bg-background'
+                }`}
+                onClick={() => setIsMenuOpen(false)}
+              >
+                About
+              </Link>
+
+              <Link
+                href="/contact"
+                className={`block px-3 py-2.5 rounded-lg transition-colors duration-200 ${
+                  isActive('/contact') 
+                    ? 'bg-primary text-primary-foreground font-semibold' 
+                    : 'text-foreground hover:bg-background'
+                }`}
+                onClick={() => setIsMenuOpen(false)}
+              >
+                Contact
+              </Link>
+            </div>
+          </nav>
+        )}
       </div>
     </header>
   );

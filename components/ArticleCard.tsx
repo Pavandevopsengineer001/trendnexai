@@ -1,6 +1,6 @@
 import Link from 'next/link';
-import { Card, CardContent, CardHeader } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
+import { Calendar, MessageSquare, ExternalLink, ArrowRight } from 'lucide-react';
+import { getCategoryById, getCategoryBadgeClass } from '@/lib/categories';
 
 interface ArticleCardProps {
   article: {
@@ -18,74 +18,119 @@ interface ArticleCardProps {
 }
 
 export default function ArticleCard({ article }: ArticleCardProps) {
+  const category = getCategoryById(article.category);
+  const badgeClass = getCategoryBadgeClass(article.category);
+
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-    });
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffTime = Math.abs(now.getTime() - date.getTime());
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+    if (diffDays === 0) return 'Today';
+    if (diffDays === 1) return 'Yesterday';
+    if (diffDays < 7) return `${diffDays}d ago`;
+    if (diffDays < 30) return `${Math.floor(diffDays / 7)}w ago`;
+    if (diffDays < 365) return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   };
 
   return (
-    <Card className="h-full card-premium animate-fade-up hover:scale-[1.01] duration-300">
-      {article.image_url && (
-        <div className="h-40 overflow-hidden rounded-t-xl">
-          <img src={article.image_url} alt={article.title} className="object-cover w-full h-full" />
-        </div>
-      )}
-      <CardHeader className="pb-3">
-        <div className="flex items-start justify-between mb-2">
-          <div className="flex gap-2 items-center">
-            <Badge variant="secondary" className="text-xs">
-              {article.category}
-            </Badge>
-            {article.company && (
-              <span className="text-xs text-gray-500 dark:text-gray-300">{article.company}</span>
-            )}
+    <article className="card-premium group h-full flex flex-col overflow-hidden transition-all duration-300">
+      {/* Image Container with Overlay */}
+      <div className="relative h-56 overflow-hidden bg-muted flex-shrink-0">
+        {article.image_url ? (
+          <>
+            <img
+              src={article.image_url}
+              alt={article.title}
+              className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-110"
+              loading="lazy"
+            />
+            {/* Overlay Gradient */}
+            <div className="absolute inset-0 bg-gradient-to-t from-foreground/40 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+          </>
+        ) : (
+          <div className={`w-full h-full ${category?.bgColor} flex items-center justify-center`}>
+            <div className="text-center">
+              <MessageSquare className="w-10 h-10 mx-auto mb-2 opacity-30" />
+              <p className="text-sm text-muted-foreground">No image</p>
+            </div>
           </div>
-          <span className="text-xs text-gray-500">
+        )}
+
+        {/* Category Badge - Positioned on image */}
+        {category && (
+          <div className="absolute top-3 left-3">
+            <span className={`badge ${badgeClass} text-xs font-semibold`}>
+              {category.icon} {category.label}
+            </span>
+          </div>
+        )}
+      </div>
+
+      {/* Content Container */}
+      <div className="flex-1 p-5 flex flex-col">
+        {/* Date */}
+        <div className="flex items-center gap-2 mb-3">
+          <Calendar className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+          <span className="text-xs text-muted-foreground font-medium">
             {formatDate(article.createdAt)}
           </span>
         </div>
+
+        {/* Title */}
         <Link href={`/article/${article.slug}`}>
-          <h3 className="text-lg font-semibold text-gray-900 hover:text-blue-600 transition-colors line-clamp-2">
+          <h3 className="text-lg font-bold text-foreground group-hover:text-primary transition-colors duration-200 line-clamp-3 mb-3 leading-snug">
             {article.title}
           </h3>
         </Link>
-      </CardHeader>
 
-      <CardContent>
-        <p className="text-gray-600 text-sm mb-4 line-clamp-3">
+        {/* Summary */}
+        <p className="text-sm text-muted-foreground line-clamp-2 mb-4 flex-grow leading-relaxed">
           {article.summary}
         </p>
 
-        <div className="flex flex-wrap gap-1 mb-4">
-          {article.tags.slice(0, 3).map((tag) => (
-            <Badge key={tag} variant="outline" className="text-xs">
-              {tag}
-            </Badge>
-          ))}
-        </div>
+        {/* Tags - Optional */}
+        {article.tags && article.tags.length > 0 && (
+          <div className="flex flex-wrap gap-2 mb-4 pb-4 border-b border-border/50">
+            {article.tags.slice(0, 2).map((tag) => (
+              <span key={tag} className="text-xs px-2 py-1 bg-muted text-muted-foreground rounded-md">
+                #{tag}
+              </span>
+            ))}
+            {article.tags.length > 2 && (
+              <span className="text-xs px-2 py-1 bg-muted text-muted-foreground rounded-md">
+                +{article.tags.length - 2}
+              </span>
+            )}
+          </div>
+        )}
 
-        <div className="flex items-center justify-between gap-2">
+        {/* Footer with CTA */}
+        <div className="flex items-center justify-between gap-2 mt-auto">
           <Link
             href={`/article/${article.slug}`}
-            className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+            className="inline-flex items-center gap-1 text-primary hover:text-primary/80 font-semibold text-sm group/link transition-colors duration-200"
           >
-            Read More →
+            Read More
+            <ArrowRight className="w-4 h-4 group-hover/link:translate-x-1 transition-transform duration-200" />
           </Link>
+
           {article.source_url && (
             <a
               href={article.source_url}
               target="_blank"
-              rel="noreferrer"
-              className="text-xs text-gray-500 hover:text-gray-700"
+              rel="noreferrer noopener"
+              className="p-2 text-muted-foreground hover:text-primary hover:bg-muted rounded-lg transition-all duration-200 flex-shrink-0"
+              title="Open original source"
+              aria-label="View original source"
             >
-              Original Source
+              <ExternalLink className="w-4 h-4" />
             </a>
           )}
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </article>
   );
 }

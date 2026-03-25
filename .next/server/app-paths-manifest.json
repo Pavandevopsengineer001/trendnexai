@@ -1,16 +1,1 @@
-{
-  "/_not-found/page": "app/_not-found/page.js",
-  "/api/article/[slug]/route": "app/api/article/[slug]/route.js",
-  "/api/fetch-news/route": "app/api/fetch-news/route.js",
-  "/api/generate-article/route": "app/api/generate-article/route.js",
-  "/article/[slug]/page": "app/article/[slug]/page.js",
-  "/category/[category]/page": "app/category/[category]/page.js",
-  "/category/page": "app/category/page.js",
-  "/company/[company]/page": "app/company/[company]/page.js",
-  "/page": "app/page.js",
-  "/company/page": "app/company/page.js",
-  "/about/page": "app/about/page.js",
-  "/contact/page": "app/contact/page.js",
-  "/privacy/page": "app/privacy/page.js",
-  "/terms/page": "app/terms/page.js"
-}
+{}

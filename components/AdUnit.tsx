@@ -42,7 +42,7 @@ export default function AdUnit({
 
   return (
     <div 
-      className={`bg-gray-50 dark:bg-slate-800 rounded-lg p-4 flex items-center justify-center text-center ${getSlotClass()}`}
+      className={`bg-muted dark:bg-card rounded-lg p-4 flex items-center justify-center text-center border border-border ${getSlotClass()}`}
       data-ad-slot={slot}
     >
       {/* Google AdSense placeholder */}
@@ -60,7 +60,7 @@ export default function AdUnit({
       />
       
       {/* Fallback for development without AdSense configured */}
-      <div className="text-gray-400 dark:text-gray-500 text-sm">
+      <div className="text-muted-foreground text-sm">
         <div>Advertisement</div>
         <div className="text-xs mt-1">Slot: {slot}</div>
       </div>
