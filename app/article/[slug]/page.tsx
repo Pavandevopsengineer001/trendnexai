@@ -30,7 +30,7 @@ async function getArticle(slug: string) {
 export async function generateStaticParams() {
   try {
     const res = await fetch(`${API_BASE}/api/articles?limit=1000&status=published`, {
-      revalidate: 86400,
+      next: { revalidate: 86400 },
     });
     if (!res.ok) return [];
     const data = await res.json();
