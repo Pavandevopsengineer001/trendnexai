@@ -1,0 +1,13 @@
+fastapi==0.111.0
+uvicorn[standard]==0.24.0
+pydantic==2.9.1
+motor==3.7.1
+python-dotenv==1.0.0
+httpx==0.28.1
+openai==1.59.9
+APScheduler==3.10.1
+python-slugify==8.0.1
+celery==5.3.1
+redis==7.4.0
+pytest==8.4.0
+pytest-asyncio==0.22.0
