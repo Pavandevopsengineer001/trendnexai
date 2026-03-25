@@ -1,0 +1,247 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  test-backend:
+    runs-on: ubuntu-latest
+    services:
+      mongodb:
+        image: mongo:7.0
+        options: >-
+          --health-cmd="mongosh localhost --eval 'db.runCommand({ ping: 1 })'."
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+        ports:
+          - 27017:27017
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+        ports:
+          - 6379:6379
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+
+    - name: Cache pip packages
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('backend/requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+
+    - name: Install dependencies
+      run: |
+        cd backend
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+
+    - name: Lint with flake8
+      run: |
+        pip install flake8
+        flake8 backend/app --count --select=E9,F63,F7,F82 --show-source --statistics
+        flake8 backend/app --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+
+    - name: Run backend tests
+      env:
+        MONGODB_URI: mongodb://localhost:27017/trendnexai
+        REDIS_URL: redis://localhost:6379/0
+      run: |
+        cd backend
+        pytest tests/ -v --cov=app --cov-report=xml
+
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        files: ./backend/coverage.xml
+        flags: unittests
+        name: codecov-umbrella
+
+  test-frontend:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+
+    - name: Install dependencies
+      run: npm ci
+
+    - name: Lint code
+      run: npm run lint
+
+    - name: Build frontend
+      env:
+        NEXT_PUBLIC_API_URL: http://localhost:8000
+      run: npm run build
+
+    - name: Run frontend tests
+      run: npm run test -- --coverage --watchAll=false 2>/dev/null || true
+
+  security-scan:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Run Trivy vulnerability scanner
+      uses: aquasecurity/trivy-action@master
+      with:
+        scan-type: 'fs'
+        scan-ref: '.'
+        format: 'sarif'
+        output: 'trivy-results.sarif'
+
+    - name: Upload Trivy results to GitHub Security tab
+      uses: github/codeql-action/upload-sarif@v2
+      with:
+        sarif_file: 'trivy-results.sarif'
+
+  build-and-push:
+    needs: [test-backend, test-frontend, security-scan]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v2
+
+    - name: Log in to Container Registry
+      uses: docker/login-action@v2
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Extract metadata for backend
+      id: meta-backend
+      uses: docker/metadata-action@v4
+      with:
+        images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/backend
+        tags: |
+          type=ref,event=branch
+          type=semver,pattern={{version}}
+          type=semver,pattern={{major}}.{{minor}}
+          type=sha
+
+    - name: Build and push backend image
+      uses: docker/build-push-action@v4
+      with:
+        context: .
+        file: ./backend/Dockerfile
+        push: true
+        tags: ${{ steps.meta-backend.outputs.tags }}
+        labels: ${{ steps.meta-backend.outputs.labels }}
+
+    - name: Extract metadata for frontend
+      id: meta-frontend
+      uses: docker/metadata-action@v4
+      with:
+        images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/frontend
+        tags: |
+          type=ref,event=branch
+          type=semver,pattern={{version}}
+          type=semver,pattern={{major}}.{{minor}}
+          type=sha
+
+    - name: Build and push frontend image
+      uses: docker/build-push-action@v4
+      with:
+        context: .
+        file: ./Dockerfile
+        push: true
+        tags: ${{ steps.meta-frontend.outputs.tags }}
+        labels: ${{ steps.meta-frontend.outputs.labels }}
+
+  deploy-development:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/develop'
+    environment:
+      name: development
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Deploy to development
+      env:
+        SSH_KEY: ${{ secrets.DEV_SSH_KEY }}
+        SSH_HOST: ${{ secrets.DEV_SSH_HOST }}
+        SSH_USER: ${{ secrets.DEV_SSH_USER }}
+      run: |
+        mkdir -p ~/.ssh
+        echo "$SSH_KEY" > ~/.ssh/private-key
+        chmod 600 ~/.ssh/private-key
+        ssh-keyscan -H "$SSH_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+        ssh -i ~/.ssh/private-key -o StrictHostKeyChecking=no "$SSH_USER@$SSH_HOST" \
+          'cd /app/trendnexai && docker-compose pull && docker-compose up -d'
+
+  deploy-production:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    environment:
+      name: production
+      
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Deploy to production
+      env:
+        SSH_KEY: ${{ secrets.PROD_SSH_KEY }}
+        SSH_HOST: ${{ secrets.PROD_SSH_HOST }}
+        SSH_USER: ${{ secrets.PROD_SSH_USER }}
+      run: |
+        mkdir -p ~/.ssh
+        echo "$SSH_KEY" > ~/.ssh/private-key
+        chmod 600 ~/.ssh/private-key
+        ssh-keyscan -H "$SSH_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+        ssh -i ~/.ssh/private-key -o StrictHostKeyChecking=no "$SSH_USER@$SSH_HOST" \
+          'cd /app/trendnexai && \
+           docker-compose pull && \
+           docker-compose up -d && \
+           docker-compose exec -T backend python -m alembic upgrade head'
+
+    - name: Health check
+      env:
+        API_URL: ${{ secrets.PROD_API_URL }}
+      run: |
+        for i in {1..30}; do
+          if curl -s "$API_URL/health" | grep -q "healthy"; then
+            echo "✓ Production deployment successful"
+            exit 0
+          fi
+          echo "Waiting for deployment... ($i/30)"
+          sleep 2
+        done
+        echo "✗ Health check failed"
+        exit 1

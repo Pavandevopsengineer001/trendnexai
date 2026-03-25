@@ -1,53 +1,351 @@
-import os
+"""
+AI Content Generation Engine for TrendNexAI.
+Uses OpenAI to rewrite and enhance news articles for SEO and readability.
+"""
+
+import logging
+import json
 import re
-import time
-from typing import Dict
-from openai import OpenAI, OpenAIError
+from typing import Optional, Dict, List
+import os
+from openai import AsyncOpenAI
 
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+logger = logging.getLogger(__name__)
 
-BLOCKED_KEYWORDS = ["terror", "violence", "hate", "adult", "gambling", "drugs"]
+# Initialize OpenAI client
+client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-def _contains_blocked(s: str) -> bool:
-    if not s:
-        return False
-    lower = s.lower()
-    return any(keyword in lower for keyword in BLOCKED_KEYWORDS)
-
-def _validate_content(article: Dict):
-    text = " ".join([str(article.get(k, "")) for k in ["title", "description", "content"]])
-    if _contains_blocked(text):
-        raise ValueError("Article contains blocked content")
-
-async def _openai_with_retry(prompt: str, max_retries: int = 3):
-    delay = 1
-    for attempt in range(1, max_retries + 1):
+class AIContentGenerator:
+    """
+    Generates SEO-optimized content using OpenAI.
+    Handles article rewriting, title generation, and keyword insertion.
+    """
+    
+    def __init__(self):
+        self.model = os.getenv("OPENAI_MODEL", "gpt-4-turbo")
+        self.max_tokens = int(os.getenv("OPENAI_MAX_TOKENS", 2000))
+        self.config = self._load_config()
+    
+    def _load_config(self) -> Dict:
+        """Load AI configuration from environment or defaults"""
+        return {
+            "tone": os.getenv("AI_TONE", "professional"),
+            "style": os.getenv("AI_STYLE", "informative"),
+            "include_facts": True,
+            "avoid_plagiarism": True,
+            "target_words": int(os.getenv("AI_TARGET_WORDS", 700)),
+            "include_internal_links": True
+        }
+    
+    async def generate_article(
+        self,
+        original_title: str,
+        original_content: str,
+        category: str = "general",
+        keywords: Optional[List[str]] = None,
+        language: str = "en"
+    ) -> Dict[str, str]:
+        """
+        Generate a complete SEO-optimized article from raw news content.
+        
+        Returns:
+            Dict with title, summary, content, seo_title, seo_description, tags
+        """
         try:
-            response = client.responses.create(
-                model="gpt-4.1-mini",
-                input=prompt,
-                max_tokens=1200,
-                temperature=0.7,
+            keywords = keywords or self._extract_keywords(original_title, original_content)
+            
+            # Step 1: Generate SEO headline
+            seo_title = await self._generate_seo_title(original_title, keywords)
+            
+            # Step 2: Generate compelling summary
+            summary = await self._generate_summary(original_content, keywords)
+            
+            # Step 3: Generate full article
+            full_content = await self._generate_full_article(
+                original_title,
+                original_content,
+                category,
+                keywords,
+                seo_title
             )
-            return response
-        except OpenAIError as e:
-            if hasattr(e, 'status_code') and e.status_code in (429, 500, 502, 503, 504):
-                if attempt == max_retries:
-                    raise
-                time.sleep(delay)
-                delay *= 2
-                continue
+            
+            # Step 4: Generate SEO meta description
+            seo_description = await self._generate_seo_description(full_content, keywords)
+            
+            # Step 5: Extract and enhance tags
+            tags = await self._generate_tags(full_content, keywords, category)
+            
+            return {
+                "title": seo_title,
+                "summary": summary,
+                "content": full_content,
+                "seo_title": seo_title,
+                "seo_description": seo_description,
+                "tags": tags,
+                "ai_generated": True
+            }
+        
+        except Exception as e:
+            logger.error(f"Error generating article: {e}")
             raise
+    
+    async def _generate_seo_title(self, original_title: str, keywords: List[str]) -> str:
+        """
+        Generate an SEO-friendly title.
+        - Includes primary keyword
+        - 50-60 characters (optimal for Google)
+        - Includes power word
+        """
+        primary_keyword = keywords[0] if keywords else "News"
+        
+        prompt = f"""
+Generate a compelling, SEO-friendly article title (50-60 characters) that:
+1. Includes the keyword: "{primary_keyword}"
+2. Uses a power word (How, Why, Best, Top, New, etc.)
+3. Is clickable and informative
+4. Avoids clickbait
 
+Original title: "{original_title}"
+Keywords: {", ".join(keywords)}
+
+Return ONLY the new title, nothing else.
+"""
+        
+        response = await client.chat.completions.create(
+            model=self.model,
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=100,
+            temperature=0.7
+        )
+        
+        return response.choices[0].message.content.strip()
+    
+    async def _generate_summary(self, content: str, keywords: List[str]) -> str:
+        """
+        Generate a compelling 2-3 sentence summary.
+        Should include primary keyword naturally.
+        """
+        primary_keyword = keywords[0] if keywords else ""
+        
+        prompt = f"""
+Create a concise 2-3 sentence summary (around 150 characters) that:
+1. Captures the main point of the article
+2. Naturally includes "{primary_keyword}"
+3. Is engaging and informative
+4. Ends with a call-to-action hint
+
+Article content: {content[:1000]}
+
+Return ONLY the summary, nothing else.
+"""
+        
+        response = await client.chat.completions.create(
+            model=self.model,
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=150,
+            temperature=0.7
+        )
+        
+        return response.choices[0].message.content.strip()
+    
+    async def _generate_full_article(
+        self,
+        title: str,
+        content: str,
+        category: str,
+        keywords: List[str],
+        seo_title: str
+    ) -> str:
+        """
+        Generate a complete 600-800 word article with:
+        - H1, H2 headings
+        - Natural keyword integration
+        - Proper structure
+        - Conclusion with insights
+        - No plagiarism
+        """
+        
+        keywords_str = ", ".join(keywords)
+        target_words = self.config.get("target_words", 700)
+        
+        prompt = f"""
+Rewrite this news article into a professional, SEO-optimized article with these requirements:
+
+STRUCTURE:
+1. Introduction (100-150 words) - Hook reader, introduce main topic
+2. H2 Heading: "Understanding [Topic]" (200-250 words)
+3. H2 Heading: "Key Implications" (150-200 words)
+4. H2 Heading: "What This Means for the Industry" (150-200 words)
+5. Conclusion (100-150 words) - Summary + future outlook
+
+REQUIREMENTS:
+- Target word count: {target_words} words (±50 words acceptable)
+- Naturally incorporate these keywords 2-3 times each: {keywords_str}
+- Write in {self.config.get("tone", "professional")} tone
+- Use {self.config.get("style", "informative")} writing style
+- Include facts and statistics where relevant
+- Avoid plagiarism - rewrite completely in your own words
+- Use short paragraphs (2-3 sentences max)
+- Add insights beyond original content
+- Format: Use [H1] for main heading and [H2] for subheadings
+
+ORIGINAL ARTICLE:
+Title: {title}
+Content: {content}
+
+NEW SEO TITLE TO USE: {seo_title}
+
+Return ONLY the article content with proper heading tags, no preamble.
+"""
+        
+        response = await client.chat.completions.create(
+            model=self.model,
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=self.max_tokens,
+            temperature=0.8
+        )
+        
+        article = response.choices[0].message.content.strip()
+        # Replace markdown-style headings with proper format
+        article = article.replace("[H1]", "<h1>").replace("[/H1]", "</h1>")
+        article = article.replace("[H2]", "<h2>").replace("[/H2]", "</h2>")
+        
+        return article
+    
+    async def _generate_seo_description(self, content: str, keywords: List[str]) -> str:
+        """
+        Generate SEO meta description.
+        - 150-160 characters
+        - Includes primary keyword
+        - Compelling call-to-action
+        """
+        primary_keyword = keywords[0] if keywords else ""
+        
+        prompt = f"""
+Create an SEO meta description (150-160 characters) that:
+1. Includes the keyword: "{primary_keyword}"
+2. Summarizes the main value proposition
+3. Includes a call-to-action (Learn, Discover, Explore, etc.)
+4. Is compelling and click-worthy
+
+Article preview: {content[:500]}
+
+Return ONLY the meta description, nothing else.
+"""
+        
+        response = await client.chat.completions.create(
+            model=self.model,
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=200,
+            temperature=0.7
+        )
+        
+        description = response.choices[0].message.content.strip()
+        # Trim to 160 chars if needed
+        return description[:160]
+    
+    async def _generate_tags(self, content: str, keywords: List[str], category: str) -> List[str]:
+        """
+        Generate relevant tags for the article.
+        - 5-8 tags
+        - Related to content and keywords
+        - Include category
+        """
+        
+        prompt = f"""
+Generate 5-8 relevant tags for this article.
+
+Tags should:
+1. Include the category: "{category}"
+2. Include these keywords where relevant: {", ".join(keywords)}
+3. Be single words or 2-word phrases
+4. Be popular search terms related to the content
+5. Be lowercase
+
+Article content preview: {content[:500]}
+
+Return as JSON array: ["tag1", "tag2", "tag3"]
+"""
+        
+        response = await client.chat.completions.create(
+            model=self.model,
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=200,
+            temperature=0.7
+        )
+        
+        try:
+            tags_str = response.choices[0].message.content.strip()
+            # Extract JSON array from response
+            import re
+            match = re.search(r'\[.*\]', tags_str, re.DOTALL)
+            if match:
+                tags = json.loads(match.group())
+                return tags
+        except Exception as e:
+            logger.warning(f"Failed to parse tags: {e}")
+        
+        # Fallback tags
+        return [category] + keywords[:4]
+    
+    def _extract_keywords(self, title: str, content: str) -> List[str]:
+        """
+        Extract keywords from title and content.
+        Returns top 5-6 keywords.
+        """
+        # Simple keyword extraction (in production, use NLP libraries)
+        title_words = set(title.lower().split())
+        content_words = content.lower().split()
+        
+        # Remove stop words
+        stop_words = {
+            "the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "for",
+            "of", "is", "was", "are", "be", "been", "with", "as", "by", "from"
+        }
+        
+        keywords = []
+        for word in set(content_words):
+            if len(word) > 4 and word not in stop_words and word[0].isalpha():
+                keywords.append(word)
+                if len(keywords) >= 6:
+                    break
+        
+        return keywords[:6] if keywords else ["news", "update"]
+
+# Singleton instance
+_generator = None
+
+def get_ai_generator():
+    """Get or create AI generator instance"""
+    global _generator
+    if _generator is None:
+        _generator = AIContentGenerator()
+    return _generator
+
+async def generate_article(
+    title: str,
+    content: str,
+    category: str = "general",
+    keywords: Optional[List[str]] = None,
+    language: str = "en"
+) -> Dict[str, str]:
+    """
+    Public function to generate an article.
+    """
+    generator = get_ai_generator()
+    return await generator.generate_article(title, content, category, keywords, language)
+
+# Backward compatibility  
 async def paraphrase_article(article: dict):
-    _validate_content(article)
+    """
+    Backward compatible function for article paraphrasing.
+    """
+    title = article.get("title", "")
+    content = article.get("content", "") or article.get("description", "")
+    category = article.get("category", "general")
+    
+    return await generate_article(title, content, category)
 
-    prompt = f"""
-You are an AI writer. Rewrite the article in English with same meaning but fresh phrasing. Then translate into Telugu, Tamil, Kannada, Malayalam.
-Title: {article.get('title')}
-Description: {article.get('description')}
-Content: {article.get('content')}
-Category: {article.get('category', 'General')}
 Source: {article.get('source', {}).get('name', 'TrendNexAI')}
 
 Respond EXACTLY with a valid JSON object only like:

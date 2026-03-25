@@ -1,6 +1,26 @@
-from app.celery_worker import celery_app
-from app.main import fetch_and_process
+"""
+Celery tasks for TrendNexAI.
+Import from celery_app.py for actual task definitions.
+This module is kept for backward compatibility.
+"""
 
-@celery_app.task(bind=True, autoretry_for=(Exception,), retry_backoff=True, retry_kwargs={"max_retries": 5})
-def fetch_and_process_task(self, limit_per_cat=5):
-    return __import__("asyncio").run(fetch_and_process(limit_per_cat))
+from app.celery_app import (
+    fetch_and_process_news_task,
+    process_single_article_task,
+    clear_cache_task,
+    generate_sitemap_task,
+    archive_old_articles_task
+)
+
+# Alias for backward compatibility
+fetch_and_process_task = fetch_and_process_news_task
+process_article_task = process_single_article_task
+
+__all__ = [
+    'fetch_and_process_task',
+    'process_article_task',
+    'clear_cache_task',
+    'generate_sitemap_task',
+    'archive_old_articles_task'
+]
+
