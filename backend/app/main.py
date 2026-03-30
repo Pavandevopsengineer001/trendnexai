@@ -33,6 +33,7 @@ from app.middleware import (
     TrendNexAIException
 )
 from app.dependencies import get_current_user, require_admin, require_editor
+from app.admin_routes import router as admin_router
 from redis.asyncio import Redis
 
 # ============== Configuration ==============
@@ -103,6 +104,10 @@ app = FastAPI(
 app.add_middleware(LoggingMiddleware)
 app.add_middleware(RateLimitMiddleware, requests_per_minute=RATE_LIMIT)
 app.add_middleware(CORSMiddleware, allow_origins=ALLOWED_ORIGINS)
+
+# Register admin routes
+app.include_router(admin_router)
+logger.info("✓ Admin routes registered")
 
 # ============== Pydantic Models ==============
 class LoginRequest(BaseModel):

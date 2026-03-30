@@ -65,9 +65,9 @@ export default function Footer() {
                 <Image
                   src={theme === 'dark' ? '/trendnexai_dk.png' : '/trendnexai_wt.png'}
                   alt="TrendNexAI Logo"
-                  width={560}
-                  height={200}
-                  className="h-36 w-auto object-contain transition-all duration-300"
+                  width={280}
+                  height={100}
+                  className="h-32 w-auto object-contain transition-all duration-300"
                 />
               )}
             </Link>

@@ -4,10 +4,13 @@ from datetime import datetime
 from enum import Enum
 
 class ArticleStatus(str, Enum):
-    """Article publication status"""
-    DRAFT = "draft"
-    PUBLISHED = "published"
-    ARCHIVED = "archived"
+    """Article publication status workflow"""
+    PENDING_REVIEW = "pending_review"  # New articles waiting for admin review
+    DRAFT = "draft"                     # Draft articles
+    APPROVED = "approved"               # Approved but not published
+    PUBLISHED = "published"             # Live articles
+    ARCHIVED = "archived"               # Old/removed articles
+    REJECTED = "rejected"               # Rejected articles
 
 class Language(str, Enum):
     """Supported languages"""
@@ -114,4 +117,62 @@ class FetchNewsRequest(BaseModel):
 class BatchDeleteRequest(BaseModel):
     """Request to delete multiple articles"""
     article_ids: List[str] = Field(..., min_items=1)
+
+class AIInsights(BaseModel):
+    """AI-generated insights about an article"""
+    why_it_matters: str
+    key_risks: List[str] = []
+    action_items: List[str] = []
+    key_takeaways: List[str] = []
+    related_tools: List[dict] = []
+    impact_score: float = 5.0
+
+    class Config:
+        json_encoders = {
+            float: lambda v: round(v, 1)
+        }
+
+class ArticleAdmin(ArticleOut):
+    """Extended article schema for admin with insights"""
+    ai_insights: Optional[AIInsights] = None
+    model_used: Optional[str] = "openai"
+    generated_at: Optional[datetime] = None
+    reviewed_by: Optional[str] = None
+    reviewed_at: Optional[datetime] = None
+    rejection_reason: Optional[str] = None
+    
+    class Config:
+        populate_by_name = True
+        json_encoders = {
+            datetime: lambda v: v.isoformat() if v else None,
+            float: lambda v: round(v, 1) if v else None
+        }
+
+class StatusChangeRequest(BaseModel):
+    """Request to change article status"""
+    status: ArticleStatus = Field(..., description="New status")
+    reason: Optional[str] = Field(None, description="Reason for status change (required for rejection)")
+    
+    @validator('reason')
+    def reason_required_for_rejection(cls, v, values):
+        if values.get('status') == ArticleStatus.REJECTED and not v:
+            raise ValueError('Reason is required when rejecting an article')
+        return v
+
+class BulkStatusChangeRequest(BaseModel):
+    """Request to change status of multiple articles"""
+    article_ids: List[str] = Field(..., min_items=1)
+    status: ArticleStatus
+    reason: Optional[str] = None
+
+class ArticleStats(BaseModel):
+    """Article statistics"""
+    total_articles: int = 0
+    by_status: dict = {}
+    by_category: dict = {}
+    by_month: dict = {}
+    total_views: int = 0
+    avg_engagement: float = 0.0
+
+
 

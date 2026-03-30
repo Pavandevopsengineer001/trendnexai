@@ -31,7 +31,7 @@ export default function Header() {
     <header className="sticky top-0 z-50 bg-background/95 backdrop-blur-md border-b border-border transition-all duration-300">
       <div className="max-w-7xl mx-auto">
         {/* Main Navigation Bar */}
-        <div className="flex justify-between items-center px-4 sm:px-6 lg:px-8 h-24">
+        <div className="flex justify-between items-center px-4 sm:px-6 lg:px-8 h-20">
           {/* Logo */}
           <Link
             href="/"
@@ -41,9 +41,9 @@ export default function Header() {
               <Image
                 src={theme === 'dark' ? '/trendnexai_dk.png' : '/trendnexai_wt.png'}
                 alt="TrendNexAI Logo"
-                width={400}
-                height={150}
-                className="h-24 w-auto object-contain transition-all duration-300"
+                width={240}
+                height={80}
+                className="h-20 w-auto object-contain transition-all duration-300"
                 priority
               />
             )}
